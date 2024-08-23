@@ -7,6 +7,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - LOGGING_LEVEL=DEBUG
+    volumes:
+      - ./config/server_config.ini:/app/config.ini  # Volumen para el archivo de configuración del servidor
     networks:
       - testing_net
 
@@ -17,6 +19,8 @@ services:
     environment:
       - CLI_ID=1
       - CLI_LOG_LEVEL=DEBUG
+    volumes:
+      - ./config/client1_config.yaml:/app/config.yaml  # Volumen para el archivo de configuración del cliente
     networks:
       - testing_net
     depends_on:
