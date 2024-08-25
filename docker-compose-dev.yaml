@@ -1,26 +1,30 @@
 version: '3.8'
-
 services:
   server:
-    build: ./server
-    ports:
-      - "12345:12345"
+    container_name: server
+    image: server:latest
+    entrypoint: python3 /main.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOGGING_LEVEL=DEBUG
     networks:
-      - mynetwork
-    volumes:
-      - ./server/config.ini:/app/config.ini  # Asegúrate de que la ruta en el contenedor sea la correcta
+      - testing_net
 
   client1:
-    build: ./client
+    container_name: client1
+    image: client:latest
+    entrypoint: /client
     environment:
-      - CLIENT_ID=1
+      - CLI_ID=1
+      - CLI_LOG_LEVEL=DEBUG
+    networks:
+      - testing_net
     depends_on:
       - server
-    networks:
-      - mynetwork
-    volumes:
-      - ./client/config.yaml:/app/config.yaml  # Asegúrate de que la ruta en el contenedor sea la correcta
 
 networks:
-  mynetwork:
-    driver: bridge
+  testing_net:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.125.0/24

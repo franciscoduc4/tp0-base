@@ -1,48 +1,57 @@
 #!/bin/bash
 
-# Verifico que se hayan proporcionado los argumentos necesarios
+# Verifica que se hayan proporcionado los dos parámetros requeridos
 if [ $# -ne 2 ]; then
-  echo "Uso: $0 <nombre del archivo de salida> <cantidad de clientes>"
+  echo "Uso: $0 <nombre_del_archivo_de_salida> <cantidad_de_clientes>"
   exit 1
 fi
 
-OUTPUT_FILE=$1
-CLIENT_COUNT=$2
+# Asigna los parámetros a variables para mayor claridad
+output_file=$1
+num_clients=$2
 
-# Inicializo el archivo de salida con la configuración básica de docker-compose
-cat <<EOL > $OUTPUT_FILE
+# Inicia el contenido del archivo YAML con la configuración básica
+cat <<EOL > $output_file
 version: '3.8'
-
 services:
   server:
-    build: ./server
-    ports:
-      - "12345:12345"
+    container_name: server
+    image: server:latest
+    entrypoint: python3 /main.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOGGING_LEVEL=DEBUG
     networks:
-      - mynetwork
+      - testing_net
 EOL
 
-# Agrego la configuración de cada cliente
-for ((i=1; i<=CLIENT_COUNT; i++))
-do
-  cat <<EOL >> $OUTPUT_FILE
+# Agrega cada cliente al archivo YAML
+for ((i=1; i<=$num_clients; i++)); do
+  cat <<EOL >> $output_file
+
   client$i:
-    build: ./client
+    container_name: client$i
+    image: client:latest
+    entrypoint: /client
     environment:
-      - CLIENT_ID=$i
+      - CLI_ID=$i
+      - CLI_LOG_LEVEL=DEBUG
+    networks:
+      - testing_net
     depends_on:
       - server
-    networks:
-      - mynetwork
 EOL
 done
 
-# Agrego la red al final del archivo
-cat <<EOL >> $OUTPUT_FILE
+# Añade la configuración de la red al final del archivo YAML
+cat <<EOL >> $output_file
 
 networks:
-  mynetwork:
-    driver: bridge
+  testing_net:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.125.0/24
 EOL
 
-echo "Archivo $OUTPUT_FILE generado con $CLIENT_COUNT clientes."
+echo "Archivo Docker Compose generado en $output_file con $num_clients clientes."
