@@ -5,7 +5,6 @@ from common.server import Server
 import logging
 import os
 
-
 def initialize_config():
     """ Parse env variables or config file to find program config params
 
@@ -16,7 +15,6 @@ def initialize_config():
     If parsing succeeded, the function returns a ConfigParser object 
     with config parameters
     """
-
     config = ConfigParser(os.environ)
     # If config.ini does not exists original config object is not modified
     config.read("config.ini")
@@ -27,12 +25,11 @@ def initialize_config():
         config_params["listen_backlog"] = int(os.getenv('SERVER_LISTEN_BACKLOG', config["DEFAULT"]["SERVER_LISTEN_BACKLOG"]))
         config_params["logging_level"] = os.getenv('LOGGING_LEVEL', config["DEFAULT"]["LOGGING_LEVEL"])
     except KeyError as e:
-        raise KeyError("Key was not found. Error: {} .Aborting server".format(e))
+        raise KeyError(f"Key was not found. Error: {e} .Aborting server")
     except ValueError as e:
-        raise ValueError("Key could not be parsed. Error: {}. Aborting server".format(e))
+        raise ValueError(f"Key could not be parsed. Error: {e}. Aborting server")
 
     return config_params
-
 
 def main():
     config_params = initialize_config()
@@ -43,7 +40,6 @@ def main():
     initialize_log(logging_level)
 
     # Log config parameters at the beginning of the program to verify the configuration
-    # of the component
     logging.debug(f"action: config | result: success | port: {port} | "
                   f"listen_backlog: {listen_backlog} | logging_level: {logging_level}")
 
@@ -63,7 +59,6 @@ def initialize_log(logging_level):
         level=logging_level,
         datefmt='%Y-%m-%d %H:%M:%S',
     )
-
 
 if __name__ == "__main__":
     main()

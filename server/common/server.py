@@ -2,6 +2,7 @@ import socket
 import logging
 import signal
 import sys
+from common.utils import Bet, store_bets  
 
 
 class Server:
@@ -20,7 +21,7 @@ class Server:
         self._server_socket.close()
         logging.info("action: shutdown | result: success")
         sys.exit(0)
-        
+
     def run(self):
         """
         Dummy Server loop
@@ -37,23 +38,33 @@ class Server:
             self.__handle_client_connection(client_sock)
 
     def __handle_client_connection(self, client_sock):
-        """
-        Read message from a specific client socket and closes the socket
+            """
+            Read message from a specific client socket and closes the socket
 
-        If a problem arises in the communication with the client, the
-        client socket will also be closed
-        """
-        try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
-        except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
-        finally:
-            client_sock.close()
+            If a problem arises in the communication with the client, the
+            client socket will also be closed
+            """
+            try:
+                # Receive data from client
+                data = client_sock.recv(1024).rstrip().decode('utf-8')
+                # Parse the bet data sent by the client (assumed to be in CSV format)
+                agency, first_name, last_name, document, birthdate, number = data.split(',')
+                
+                # Create Bet object
+                bet = Bet(agency, first_name, last_name, document, birthdate, number)
+                
+                # Store bet
+                store_bets([bet])
+                
+                # Log the successful storage of the bet
+                logging.info(f'action: apuesta_almacenada | result: success | dni: {document} | numero: {number}')
+                
+                # Send a confirmation back to the client
+                client_sock.send("Bet stored successfully\n".encode('utf-8'))
+            except (OSError, ValueError) as e:
+                logging.error(f"action: receive_message | result: fail | error: {e}")
+            finally:
+                client_sock.close()
 
     def __accept_new_connection(self):
         """
@@ -62,8 +73,6 @@ class Server:
         Function blocks until a connection to a client is made.
         Then connection created is printed and returned
         """
-
-        # Connection arrived
         logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')

@@ -46,12 +46,13 @@ func InitConfig() (*viper.Viper, error) {
 	if err := v.ReadInConfig(); err != nil {
 		fmt.Printf("Configuration could not be read from config file. Using env variables instead")
 	}
-// Parse time.Duration variables and return an error if those variables cannot be parsed
+	
+	// Parse time.Duration variables and return an error if those variables cannot be parsed
 	durationStr := v.GetString("loop.period")
 	if durationStr == "" {
 		return nil, errors.New("loop.period is not set")
 	}
-	
+
 	if _, err := time.ParseDuration(v.GetString("loop.period")); err != nil {
 		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
 	}
@@ -97,10 +98,21 @@ func main() {
 	v, err := InitConfig()
 	if err != nil {
 		log.Criticalf("%s", err)
+		os.Exit(1) // Asegúrate de salir si hay un error en la configuración
 	}
 
 	if err := InitLogger(v.GetString("log.level")); err != nil {
 		log.Criticalf("%s", err)
+		os.Exit(1) // Asegúrate de salir si hay un error en la inicialización del logger
+	}
+
+	// Validar la existencia de las variables de entorno necesarias para las apuestas
+	requiredEnvVars := []string{"NOMBRE", "APELLIDO", "DOCUMENTO", "NACIMIENTO", "NUMERO"}
+	for _, envVar := range requiredEnvVars {
+		if os.Getenv(envVar) == "" {
+			log.Criticalf("Falta la variable de entorno requerida: %s", envVar)
+			os.Exit(1)
+		}
 	}
 
 	// Print program config with debugging purposes
