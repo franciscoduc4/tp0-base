@@ -1,5 +1,7 @@
 import socket
 import logging
+import signal
+import sys
 
 
 class Server:
@@ -9,6 +11,16 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
 
+        # Register signal handler for graceful shutdown       
+        signal.signal(signal.SIGTERM, self._shutdown)
+
+    def _shutdown(self, signum, frame):
+        """Handle shutdown signal"""
+        logging.info("action: shutdown | result: in_progress")
+        self._server_socket.close()
+        logging.info("action: shutdown | result: success")
+        sys.exit(0)
+        
     def run(self):
         """
         Dummy Server loop

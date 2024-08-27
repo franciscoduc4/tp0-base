@@ -46,9 +46,12 @@ func InitConfig() (*viper.Viper, error) {
 	if err := v.ReadInConfig(); err != nil {
 		fmt.Printf("Configuration could not be read from config file. Using env variables instead")
 	}
-
-	// Parse time.Duration variables and return an error if those variables cannot be parsed
-
+// Parse time.Duration variables and return an error if those variables cannot be parsed
+	durationStr := v.GetString("loop.period")
+	if durationStr == "" {
+		return nil, errors.New("loop.period is not set")
+	}
+	
 	if _, err := time.ParseDuration(v.GetString("loop.period")); err != nil {
 		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
 	}

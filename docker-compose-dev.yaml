@@ -3,7 +3,7 @@ services:
   server:
     container_name: server
     image: server:latest
-    entrypoint: python3 /main.py
+    entrypoint: python3 /server/main.py
     environment:
       - PYTHONUNBUFFERED=1
       - LOGGING_LEVEL=DEBUG
@@ -17,6 +17,7 @@ services:
     environment:
       - CLI_ID=1
       - CLI_LOG_LEVEL=DEBUG
+      - CLI_LOOP_PERIOD=5s
     networks:
       - testing_net
     depends_on:
