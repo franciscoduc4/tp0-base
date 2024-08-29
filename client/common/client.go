@@ -1,12 +1,10 @@
 package common
-
 import (
 	"bufio"
 	"fmt"
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -21,37 +19,22 @@ type ClientConfig struct {
 	ServerAddress string
 	LoopAmount    int
 	LoopPeriod    time.Duration
+	BatchMaxSize  int 
 }
 
 // Client Entity that encapsulates how
 type Client struct {
 	config ClientConfig
 	conn   net.Conn
-	bet    string // Nueva propiedad para almacenar la apuesta
+	bets   []string 
 }
 
 // NewClient Initializes a new client receiving the configuration
-// as a parameter
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
 	}
 
-	// Leer datos de apuesta desde variables de entorno
-	nombre := os.Getenv("NOMBRE")
-	apellido := os.Getenv("APELLIDO")
-	documento := os.Getenv("DOCUMENTO")
-	nacimiento := os.Getenv("NACIMIENTO")
-	numero := os.Getenv("NUMERO")
-
-	// Comprobar si todas las variables de entorno están presentes
-	if nombre == "" || apellido == "" || documento == "" || nacimiento == "" || numero == "" {
-		log.Critical("Faltan variables de entorno para la apuesta")
-		os.Exit(1)
-	}
-
-	// Construir la apuesta en formato CSV para enviarla al servidor
-	client.bet = fmt.Sprintf("%s,%s,%s,%s,%s", nombre, apellido, documento, nacimiento, numero)
 	return client
 }
 
@@ -63,10 +46,9 @@ func (c *Client) createClientSocket() error {
 	if err != nil {
 		log.Criticalf(
 			"action: connect | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
+			c.config.ID, err,
 		)
-		return err // Retorna el error para manejarlo en la llamada
+		return err
 	}
 	c.conn = conn
 	return nil
@@ -81,40 +63,23 @@ func (c *Client) StartClientLoop() {
 	// Start client loop
 	go func() {
 		for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
-			// Create the connection to the server in every loop iteration
 			if err := c.createClientSocket(); err != nil {
 				break
 			}
-			// Send the bet information to the server
-			fmt.Fprintf(c.conn, "%s\n", c.bet)
-			msg, err := bufio.NewReader(c.conn).ReadString('\n')
-			c.conn.Close()
-
-			if err != nil {
-				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-					c.config.ID,
-					err,
-				)
-				return
+			for _, betBatch := range c.bets {
+				fmt.Fprintf(c.conn, "%s\n", betBatch)
+				msg, err := bufio.NewReader(c.conn).ReadString('\n')
+				if err != nil {
+					log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+					return
+				}
+				log.Infof("action: batch_enviado | result: success | client_id: %v | msg: %v", c.config.ID, msg)
 			}
-
-			// Log the success of sending the bet
-			log.Infof("action: apuesta_enviada | result: success | dni: %s | numero: %s",
-				strings.Split(c.bet, ",")[2], // DNI
-				strings.Split(c.bet, ",")[4], // Número
-			)
-
-			log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
-				c.config.ID,
-				msg,
-			)
-
-			// Wait a time between sending one message and the next one
+			c.conn.Close()
 			time.Sleep(c.config.LoopPeriod)
 		}
 		log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 	}()
-
 	// Wait for termination signal
 	<-signalChan
 	log.Infof("action: shutdown | result: in_progress")
@@ -122,4 +87,29 @@ func (c *Client) StartClientLoop() {
 		c.conn.Close()
 	}
 	log.Infof("action: shutdown | result: success")
+}
+
+func (c *Client) SendBet(apuesta map[string]string) error {
+	if err := c.createClientSocket(); err != nil {
+		return err
+	}
+	defer c.conn.Close()
+
+
+    // betMessage := fmt.Sprintf("AGENCIA=%s,NOMBRE=%s,APELLIDO=%s,DOCUMENTO=%s,NACIMIENTO=%s,NUMERO=%s",
+    // c.config.ID, apuesta["NOMBRE"], apuesta["APELLIDO"], apuesta["DOCUMENTO"], apuesta["NACIMIENTO"], apuesta["NUMERO"])
+
+    betMessage := fmt.Sprintf("%s,%s,%s,%s,%s,%s",
+    c.config.ID, apuesta["NOMBRE"], apuesta["APELLIDO"], apuesta["DOCUMENTO"], apuesta["NACIMIENTO"], apuesta["NUMERO"])
+    
+    fmt.Fprintf(c.conn, "%s\n", betMessage)
+
+	response, err := bufio.NewReader(c.conn).ReadString('\n')
+	if err != nil {
+		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return err
+	}
+
+	log.Infof("action: respuesta_recibida | result: success | client_id: %v | response: %v", c.config.ID, response)
+	return nil
 }

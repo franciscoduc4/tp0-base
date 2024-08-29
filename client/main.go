@@ -98,21 +98,23 @@ func main() {
 	v, err := InitConfig()
 	if err != nil {
 		log.Criticalf("%s", err)
-		os.Exit(1) // Asegúrate de salir si hay un error en la configuración
+		os.Exit(1) 
 	}
 
 	if err := InitLogger(v.GetString("log.level")); err != nil {
 		log.Criticalf("%s", err)
-		os.Exit(1) // Asegúrate de salir si hay un error en la inicialización del logger
+		os.Exit(1) 
 	}
 
-	// Validar la existencia de las variables de entorno necesarias para las apuestas
 	requiredEnvVars := []string{"NOMBRE", "APELLIDO", "DOCUMENTO", "NACIMIENTO", "NUMERO"}
+	apuesta := make(map[string]string)
 	for _, envVar := range requiredEnvVars {
-		if os.Getenv(envVar) == "" {
+		value := os.Getenv(envVar)
+		if value == "" {
 			log.Criticalf("Falta la variable de entorno requerida: %s", envVar)
 			os.Exit(1)
 		}
+		apuesta[envVar] = value
 	}
 
 	// Print program config with debugging purposes
@@ -126,5 +128,13 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig)
+
+	err = client.SendBet(apuesta)
+	if err != nil {
+		log.Criticalf("Error enviando apuesta: %v", err)
+		os.Exit(1)
+	}
+	log.Infof("action: apuesta_enviada | result: success | dni: %s | numero: %s", apuesta["DOCUMENTO"], apuesta["NUMERO"])
+
 	client.StartClientLoop()
 }

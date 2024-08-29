@@ -17,6 +17,13 @@ class Bet:
         birthdate must be passed with format: 'YYYY-MM-DD'.
         number must be passed with integer format.
         """
+        print("agency: ", agency)
+        print("name: ", first_name)
+        print("last_name: ", last_name)
+        print("document: ", document)
+        print("birthdate: ", birthdate)
+        print("number: ", number)
+
         self.agency = int(agency)
         self.first_name = first_name
         self.last_name = last_name

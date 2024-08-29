@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 services:
   server:
     container_name: server
@@ -9,6 +9,8 @@ services:
       - LOGGING_LEVEL=DEBUG
     networks:
       - testing_net
+    volumes:
+      - ./server/config.ini:/config.ini
 
   client1:
     container_name: client1
@@ -18,10 +20,17 @@ services:
       - CLI_ID=1
       - CLI_LOG_LEVEL=DEBUG
       - CLI_LOOP_PERIOD=5s
+      - NOMBRE=Santiago Lionel
+      - APELLIDO=Lorca
+      - DOCUMENTO=30904465
+      - NACIMIENTO=1999-03-17
+      - NUMERO=7574
     networks:
       - testing_net
     depends_on:
       - server
+    volumes:
+      - ./client/config.yaml:/config.yaml
 
 networks:
   testing_net:

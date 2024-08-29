@@ -38,33 +38,55 @@ class Server:
             self.__handle_client_connection(client_sock)
 
     def __handle_client_connection(self, client_sock):
-            """
-            Read message from a specific client socket and closes the socket
+        """
+        Read message from a specific client socket and closes the socket
 
-            If a problem arises in the communication with the client, the
-            client socket will also be closed
-            """
-            try:
-                # Receive data from client
-                data = client_sock.recv(1024).rstrip().decode('utf-8')
-                # Parse the bet data sent by the client (assumed to be in CSV format)
-                agency, first_name, last_name, document, birthdate, number = data.split(',')
-                
-                # Create Bet object
-                bet = Bet(agency, first_name, last_name, document, birthdate, number)
-                
-                # Store bet
-                store_bets([bet])
-                
-                # Log the successful storage of the bet
-                logging.info(f'action: apuesta_almacenada | result: success | dni: {document} | numero: {number}')
-                
-                # Send a confirmation back to the client
-                client_sock.send("Bet stored successfully\n".encode('utf-8'))
-            except (OSError, ValueError) as e:
-                logging.error(f"action: receive_message | result: fail | error: {e}")
-            finally:
-                client_sock.close()
+        If a problem arises in the communication with the client, the
+        client socket will also be closed
+        """
+        try:
+            # Receive data from client
+            data = self._receive_full_message(client_sock)
+            if not data:
+                return
+
+            bets = data.split('\n')
+            bet_objects = []
+            errors = False
+            for bet_data in bets:
+                bet_data = bet_data.strip()  
+                if not bet_data: 
+                    continue
+                try:
+                    print("bet_data: ", bet_data)
+                    fields = bet_data.split(',')
+                    if len(fields) != 6:
+                        raise ValueError("Incorrect number of fields")
+                    agency, first_name, last_name, document, birthdate, number = fields
+                    if not all([agency, first_name, last_name, document, birthdate, number]):
+                        raise ValueError("Missing or empty fields in bet data")
+                    
+                    bet = Bet(agency, first_name, last_name, document, birthdate, number)
+                    bet_objects.append(bet)
+                    print("bet_objects: ", bet_objects)
+                except ValueError as e:
+                    logging.error(f"action: receive_message | result: fail | error: {e}")
+                    errors = True
+                    break
+            if errors:
+                client_sock.send("Batch processing failed\n".encode('utf-8'))
+                logging.info(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)}")
+            else:
+                store_bets(bet_objects)
+                client_sock.send("Batch processed successfully\n".encode('utf-8'))
+                logging.info(f"action: apuesta_almacenada | result: success | cantidad: {len(bets)}")
+
+        except (OSError, ValueError) as e:
+            logging.error(f"action: receive_message | result: fail | error: {e}")
+            client_sock.send("An error occurred during processing\n".encode('utf-8'))
+        finally:
+            client_sock.close()
+
 
     def __accept_new_connection(self):
         """
@@ -77,3 +99,17 @@ class Server:
         c, addr = self._server_socket.accept()
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
+    
+    def _receive_full_message(self, sock):
+        """
+        Helper method to ensure full message is read from the socket
+        """
+        BUFFER_SIZE = 8192
+        data = b''
+        while True:
+            part = sock.recv(BUFFER_SIZE)
+            data += part
+            if len(part) < BUFFER_SIZE:
+                # Either 0 or end of data
+                break
+        return data.decode('utf-8')
