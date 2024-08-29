@@ -77,7 +77,7 @@ class Server:
             else:
                 store_bets(bet_objects)
                 client_sock.send("Batch processed successfully\n".encode('utf-8'))
-                logging.info(f"action: apuesta_almacenada | result: success | cantidad: {len(bets)}")
+                logging.info(f"action: apuesta_almacenada | result: success | cantidad: {len(bet_objects)}")
 
         except (OSError, ValueError) as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
