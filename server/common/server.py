@@ -58,7 +58,6 @@ class Server:
                 if not bet_data: 
                     continue
                 try:
-                    print("bet_data: ", bet_data)
                     fields = bet_data.split(',')
                     if len(fields) != 6:
                         raise ValueError("Incorrect number of fields")
@@ -68,7 +67,6 @@ class Server:
                     
                     bet = Bet(agency, first_name, last_name, document, birthdate, number)
                     bet_objects.append(bet)
-                    print("bet_objects: ", bet_objects)
                 except ValueError as e:
                     logging.error(f"action: receive_message | result: fail | error: {e}")
                     errors = True
@@ -79,7 +77,7 @@ class Server:
             else:
                 store_bets(bet_objects)
                 client_sock.send("Batch processed successfully\n".encode('utf-8'))
-                logging.info(f"action: apuesta_almacenada | result: success | cantidad: {len(bets)}")
+                logging.info(f"action: apuesta_almacenada | result: success | cantidad: {len(bet_objects)}")
 
         except (OSError, ValueError) as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"encoding/csv"
 
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
@@ -26,9 +27,6 @@ func InitConfig() (*viper.Viper, error) {
 	// Configure viper to read env variables with the CLI_ prefix
 	v.AutomaticEnv()
 	v.SetEnvPrefix("cli")
-	// Use a replacer to replace env variables underscores with points. This let us
-	// use nested configurations in the config file and at the same time define
-	// env variables for the nested configurations
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	// Add env variables supported
@@ -37,23 +35,19 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("loop", "period")
 	v.BindEnv("loop", "amount")
 	v.BindEnv("log", "level")
+	v.BindEnv("batch", "maxAmount")
 
-	// Try to read configuration from config file. If config file
-	// does not exists then ReadInConfig will fail but configuration
-	// can be loaded from the environment variables so we shouldn't
-	// return an error in that case
 	v.SetConfigFile("./config.yaml")
 	if err := v.ReadInConfig(); err != nil {
 		fmt.Printf("Configuration could not be read from config file. Using env variables instead")
 	}
-	
-	// Parse time.Duration variables and return an error if those variables cannot be parsed
+
 	durationStr := v.GetString("loop.period")
 	if durationStr == "" {
 		return nil, errors.New("loop.period is not set")
 	}
 
-	if _, err := time.ParseDuration(v.GetString("loop.period")); err != nil {
+	if _, err := time.ParseDuration(durationStr); err != nil {
 		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
 	}
 
@@ -77,7 +71,6 @@ func InitLogger(logLevel string) error {
 	}
 	backendLeveled.SetLevel(logLevelCode, "")
 
-	// Set the backends to be used.
 	logging.SetBackend(backendLeveled)
 	return nil
 }
@@ -94,30 +87,57 @@ func PrintConfig(v *viper.Viper) {
 	)
 }
 
+func ReadBets(fileName string, id string) func(int) ([]map[string]string, error) {
+	file, err := os.Open(fileName)
+	if err != nil {
+		log.Fatalf("Could not open file %s: %s", fileName, err)
+	}
+	log.Debugf("action: open_file %v | result: success", fileName)
+	reader := csv.NewReader(file)
+
+	return func(batchSize int) ([]map[string]string, error) {
+		var bets []map[string]string
+		for i := 0; i < batchSize; i++ {
+			record, err := reader.Read()
+			if err != nil {
+				if err.Error() == "EOF" {
+					// Handle EOF by returning remaining bets
+					return bets, nil
+				}
+				return nil, errors.Wrap(err, "error reading CSV file")
+			}
+
+			if len(record) != 5 {
+				log.Warningf("Skipping invalid record: %v", record)
+				continue
+			}
+
+			bet := map[string]string{
+				"NOMBRE":    record[0],
+				"APELLIDO":  record[1],
+				"DOCUMENTO": record[2],
+				"NACIMIENTO": record[3],
+				"NUMERO":    record[4],
+			}
+			bets = append(bets, bet)
+		}
+		return bets, nil
+	}
+}
+
+
 func main() {
 	v, err := InitConfig()
 	if err != nil {
 		log.Criticalf("%s", err)
-		os.Exit(1) 
+		os.Exit(1)
 	}
 
 	if err := InitLogger(v.GetString("log.level")); err != nil {
 		log.Criticalf("%s", err)
-		os.Exit(1) 
+		os.Exit(1)
 	}
 
-	requiredEnvVars := []string{"NOMBRE", "APELLIDO", "DOCUMENTO", "NACIMIENTO", "NUMERO"}
-	apuesta := make(map[string]string)
-	for _, envVar := range requiredEnvVars {
-		value := os.Getenv(envVar)
-		if value == "" {
-			log.Criticalf("Falta la variable de entorno requerida: %s", envVar)
-			os.Exit(1)
-		}
-		apuesta[envVar] = value
-	}
-
-	// Print program config with debugging purposes
 	PrintConfig(v)
 
 	clientConfig := common.ClientConfig{
@@ -125,16 +145,30 @@ func main() {
 		ID:            v.GetString("id"),
 		LoopAmount:    v.GetInt("loop.amount"),
 		LoopPeriod:    v.GetDuration("loop.period"),
+		BatchMaxSize:  v.GetInt("batch.maxAmount"),
 	}
 
 	client := common.NewClient(clientConfig)
 
-	err = client.SendBet(apuesta)
-	if err != nil {
-		log.Criticalf("Error enviando apuesta: %v", err)
-		os.Exit(1)
+	// Get the function to read bets from the CSV file
+	betDataRead := ReadBets(v.GetString("data.file"), clientConfig.ID)
+
+	for {
+		batch, err := betDataRead(clientConfig.BatchMaxSize)
+		if err != nil {
+			log.Criticalf("Error reading bets: %v", err)
+			os.Exit(1)
+		}
+		if len(batch) == 0 {
+			break
+		}
+
+		err = client.SendBets(batch)
+		if err != nil {
+			log.Criticalf("Error sending bets: %v", err)
+			os.Exit(1)
+		}
 	}
-	log.Infof("action: apuesta_enviada | result: success | dni: %s | numero: %s", apuesta["DOCUMENTO"], apuesta["NUMERO"])
 
 	client.StartClientLoop()
 }

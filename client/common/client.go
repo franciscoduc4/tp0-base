@@ -1,10 +1,12 @@
 package common
+
 import (
 	"bufio"
 	"fmt"
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,23 +21,20 @@ type ClientConfig struct {
 	ServerAddress string
 	LoopAmount    int
 	LoopPeriod    time.Duration
-	BatchMaxSize  int 
+	BatchMaxSize  int
 }
 
 // Client Entity that encapsulates how
 type Client struct {
 	config ClientConfig
 	conn   net.Conn
-	bets   []string 
 }
 
 // NewClient Initializes a new client receiving the configuration
 func NewClient(config ClientConfig) *Client {
-	client := &Client{
+	return &Client{
 		config: config,
 	}
-
-	return client
 }
 
 // CreateClientSocket Initializes client socket. In case of
@@ -54,33 +53,28 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-// StartClientLoop Send messages to the client
+// StartClientLoop Handles the client loop to process batches and handle signals
 func (c *Client) StartClientLoop() {
-	// Setup signal handling
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM, syscall.SIGINT)
 
-	// Start client loop
 	go func() {
 		for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
 			if err := c.createClientSocket(); err != nil {
 				break
 			}
-			for _, betBatch := range c.bets {
-				fmt.Fprintf(c.conn, "%s\n", betBatch)
-				msg, err := bufio.NewReader(c.conn).ReadString('\n')
-				if err != nil {
-					log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-					return
-				}
-				log.Infof("action: batch_enviado | result: success | client_id: %v | msg: %v", c.config.ID, msg)
+
+			// Use a batch size determined by the configuration
+			for i := 0; i < c.config.BatchMaxSize; i++ {
+				// Logic to process each batch would be here
+
+				// Close connection after each batch
+				c.conn.Close()
+				time.Sleep(c.config.LoopPeriod)
 			}
-			c.conn.Close()
-			time.Sleep(c.config.LoopPeriod)
 		}
 		log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 	}()
-	// Wait for termination signal
 	<-signalChan
 	log.Infof("action: shutdown | result: in_progress")
 	if c.conn != nil {
@@ -89,27 +83,46 @@ func (c *Client) StartClientLoop() {
 	log.Infof("action: shutdown | result: success")
 }
 
-func (c *Client) SendBet(apuesta map[string]string) error {
+// SendBets Sends a batch of bets to the server
+func (c *Client) SendBets(bets []map[string]string) error {
 	if err := c.createClientSocket(); err != nil {
 		return err
 	}
 	defer c.conn.Close()
 
+	var batch []string
+	for _, bet := range bets {
+		betMessage := fmt.Sprintf("%s,%s,%s,%s,%s,%s",
+			c.config.ID, bet["NOMBRE"], bet["APELLIDO"], bet["DOCUMENTO"], bet["NACIMIENTO"], bet["NUMERO"])
 
-    // betMessage := fmt.Sprintf("AGENCIA=%s,NOMBRE=%s,APELLIDO=%s,DOCUMENTO=%s,NACIMIENTO=%s,NUMERO=%s",
-    // c.config.ID, apuesta["NOMBRE"], apuesta["APELLIDO"], apuesta["DOCUMENTO"], apuesta["NACIMIENTO"], apuesta["NUMERO"])
+		// Add the new bet to the batch
+		batch = append(batch, betMessage)
 
-    betMessage := fmt.Sprintf("%s,%s,%s,%s,%s,%s",
-    c.config.ID, apuesta["NOMBRE"], apuesta["APELLIDO"], apuesta["DOCUMENTO"], apuesta["NACIMIENTO"], apuesta["NUMERO"])
-    
-    fmt.Fprintf(c.conn, "%s\n", betMessage)
-
-	response, err := bufio.NewReader(c.conn).ReadString('\n')
-	if err != nil {
-		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-		return err
+		// If batch size reaches the configured limit, send the batch
+		if len(batch) >= c.config.BatchMaxSize {
+			batchMessage := strings.Join(batch, "\n")
+			fmt.Fprintf(c.conn, "%s\n", batchMessage)
+			response, err := bufio.NewReader(c.conn).ReadString('\n')
+			if err != nil {
+				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+				return err
+			}
+			log.Infof("action: response_received | result: success | client_id: %v | response: %v", c.config.ID, response)
+			batch = nil // Reset batch after sending
+		}
 	}
 
-	log.Infof("action: respuesta_recibida | result: success | client_id: %v | response: %v", c.config.ID, response)
+	// Send any remaining bets in the last batch
+	if len(batch) > 0 {
+		batchMessage := strings.Join(batch, "\n")
+		fmt.Fprintf(c.conn, "%s\n", batchMessage)
+		response, err := bufio.NewReader(c.conn).ReadString('\n')
+		if err != nil {
+			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			return err
+		}
+		log.Infof("action: response_received | result: success | client_id: %v | response: %v", c.config.ID, response)
+	}
+
 	return nil
 }
