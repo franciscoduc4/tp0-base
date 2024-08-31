@@ -53,6 +53,46 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
+// NotifyBetsFinished Sends a notification to the server that all bets have been sent
+func (c *Client) NotifyBetsFinished() error {
+	if err := c.createClientSocket(); err != nil {
+		return err
+	}
+	defer c.conn.Close()
+
+	message := fmt.Sprintf("NOTIFY_BETS_FINISHED %s", c.config.ID)
+	fmt.Fprintf(c.conn, "%s\n", message)
+
+	response, err := bufio.NewReader(c.conn).ReadString('\n')
+	if err != nil {
+		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return err
+	}
+	log.Infof("action: notify_bets_finished | result: success | client_id: %v | response: %v", c.config.ID, response)
+	return nil
+}
+
+// GetWinners Requests the list of winners from the server
+func (c *Client) GetWinners() ([]string, error) {
+	if err := c.createClientSocket(); err != nil {
+		return nil, err
+	}
+	defer c.conn.Close()
+
+	message := fmt.Sprintf("GET_WINNERS %s", c.config.ID)
+	fmt.Fprintf(c.conn, "%s\n", message)
+
+	response, err := bufio.NewReader(c.conn).ReadString('\n')
+	if err != nil {
+		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return nil, err
+	}
+
+	// Assuming the response contains a newline-separated list of winners
+	winners := strings.Split(strings.TrimSpace(response), "\n")
+	return winners, nil
+}
+
 // StartClientLoop Handles the client loop to process batches and handle signals
 func (c *Client) StartClientLoop() {
 	signalChan := make(chan os.Signal, 1)

@@ -125,6 +125,25 @@ func ReadBets(fileName string, id string) func(int) ([]map[string]string, error)
 	}
 }
 
+func NotifyEndOfBets(client *common.Client, config common.ClientConfig) error {
+    if err := client.NotifyBetsFinished(); err != nil {
+        log.Errorf("action: notify_bets_finished | result: fail | client_id: %v | error: %v", config.ID, err)
+        return err
+    }
+    log.Infof("action: notify_bets_finished | result: success | client_id: %v", config.ID)
+    return nil
+}
+
+
+func GetWinners(client *common.Client, config common.ClientConfig) ([]string, error) {
+    winners, err := client.GetWinners()
+    if err != nil {
+        log.Errorf("action: get_winners | result: fail | client_id: %v | error: %v", config.ID, err)
+        return nil, err
+    }
+    return winners, nil
+}
+
 
 func main() {
 	v, err := InitConfig()
@@ -169,6 +188,17 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	if err := NotifyEndOfBets(client, clientConfig); err != nil {
+		os.Exit(1)
+	}
+
+	winners, err := GetWinners(client, clientConfig)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", len(winners))
 
 	client.StartClientLoop()
 }

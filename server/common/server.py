@@ -2,8 +2,7 @@ import socket
 import logging
 import signal
 import sys
-from common.utils import Bet, store_bets  
-
+from common.utils import Bet, store_bets, load_bets, has_won
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -11,6 +10,10 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+
+        # Initialize state variables
+        self._agencies_notified = set()
+        self._drawn = False
 
         # Register signal handler for graceful shutdown       
         signal.signal(signal.SIGTERM, self._shutdown)
@@ -24,32 +27,53 @@ class Server:
 
     def run(self):
         """
-        Dummy Server loop
-
-        Server that accept a new connections and establishes a
-        communication with a client. After client with communucation
-        finishes, servers starts to accept new connections again
+        Server loop to handle incoming connections and requests
         """
-
-        # TODO: Modify this program to handle signal to graceful shutdown
-        # the server
         while True:
             client_sock = self.__accept_new_connection()
             self.__handle_client_connection(client_sock)
 
     def __handle_client_connection(self, client_sock):
         """
-        Read message from a specific client socket and closes the socket
-
-        If a problem arises in the communication with the client, the
-        client socket will also be closed
+        Read message from a specific client socket and process it
         """
         try:
-            # Receive data from client
             data = self._receive_full_message(client_sock)
             if not data:
                 return
 
+            if self._drawn:
+                logging.warning("action: sorteo_rechazado | result: fail | reason: draw already performed")
+                client_sock.send("Sorteo ya realizado. No se pueden procesar más apuestas\n".encode('utf-8'))
+                return
+
+            if data.startswith("NOTIFY_BETS_FINISHED"):
+                agency_id = data.split(' ')[1]
+                self._agencies_notified.add(agency_id)
+                if len(self._agencies_notified) == 5:
+                    self._drawn = True
+                    logging.info("action: sorteo | result: success")
+                else:
+                    logging.info(f"action: notificacion_recibida | result: success | agencia: {agency_id}")
+                    logging.info(f"Agencias notificadas: {self._agencies_notified}")
+                client_sock.send("Notificación recibida\n".encode('utf-8'))
+                return
+
+            if data.startswith("GET_WINNERS"):
+                if not self._drawn:
+                    client_sock.send("Sorteo no realizado aún\n".encode('utf-8'))
+                    return
+                
+                agency_id = data.split(' ')[1]
+                winners = self.__get_winners(agency_id)
+                if winners:
+                    response = "\n".join(winners)
+                else:
+                    response = "No hay ganadores para esta agencia"
+                client_sock.send((response + "\n").encode('utf-8'))
+                return
+
+            # Process bets if the message is not a notification or winner request
             bets = data.split('\n')
             bet_objects = []
             errors = False
@@ -85,19 +109,15 @@ class Server:
         finally:
             client_sock.close()
 
-
     def __accept_new_connection(self):
         """
-        Accept new connections
-
-        Function blocks until a connection to a client is made.
-        Then connection created is printed and returned
+        Accept new connections from clients
         """
         logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
-    
+
     def _receive_full_message(self, sock):
         """
         Helper method to ensure full message is read from the socket
@@ -111,3 +131,13 @@ class Server:
                 # Either 0 or end of data
                 break
         return data.decode('utf-8')
+
+    def __get_winners(self, agency_id):
+        """
+        Retrieve the list of winners for a specific agency
+        """
+        winners = []
+        for bet in load_bets():
+            if bet.agency == int(agency_id) and has_won(bet):
+                winners.append(bet.document)
+        return winners
