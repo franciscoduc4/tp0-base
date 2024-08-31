@@ -2,6 +2,7 @@ import socket
 import logging
 import signal
 import sys
+import threading
 from common.utils import Bet, store_bets, load_bets, has_won
 
 class Server:
@@ -14,6 +15,9 @@ class Server:
         # Initialize state variables
         self._agencies_notified = set()
         self._drawn = False
+
+        # Create a lock for synchronization
+        self._lock = threading.Lock()
 
         # Register signal handler for graceful shutdown       
         signal.signal(signal.SIGTERM, self._shutdown)
@@ -31,7 +35,9 @@ class Server:
         """
         while True:
             client_sock = self.__accept_new_connection()
-            self.__handle_client_connection(client_sock)
+            # Handle client connections in a separate thread
+            client_thread = threading.Thread(target=self.__handle_client_connection, args=(client_sock,))
+            client_thread.start()
 
     def __handle_client_connection(self, client_sock):
         """
@@ -42,36 +48,37 @@ class Server:
             if not data:
                 return
 
-            if self._drawn:
-                logging.warning("action: sorteo_rechazado | result: fail | reason: draw already performed")
-                client_sock.send("Sorteo ya realizado. No se pueden procesar más apuestas\n".encode('utf-8'))
-                return
-
-            if data.startswith("NOTIFY_BETS_FINISHED"):
-                agency_id = data.split(' ')[1]
-                self._agencies_notified.add(agency_id)
-                if len(self._agencies_notified) == 5:
-                    self._drawn = True
-                    logging.info("action: sorteo | result: success")
-                else:
-                    logging.info(f"action: notificacion_recibida | result: success | agencia: {agency_id}")
-                    logging.info(f"Agencias notificadas: {self._agencies_notified}")
-                client_sock.send("Notificación recibida\n".encode('utf-8'))
-                return
-
-            if data.startswith("GET_WINNERS"):
-                if not self._drawn:
-                    client_sock.send("Sorteo no realizado aún\n".encode('utf-8'))
+            with self._lock:
+                if self._drawn:
+                    logging.warning("action: sorteo_rechazado | result: fail | reason: draw already performed")
+                    client_sock.send("Sorteo ya realizado. No se pueden procesar más apuestas\n".encode('utf-8'))
                     return
-                
-                agency_id = data.split(' ')[1]
-                winners = self.__get_winners(agency_id)
-                if winners:
-                    response = "\n".join(winners)
-                else:
-                    response = "No hay ganadores para esta agencia"
-                client_sock.send((response + "\n").encode('utf-8'))
-                return
+
+                if data.startswith("NOTIFY_BETS_FINISHED"):
+                    agency_id = data.split(' ')[1]
+                    self._agencies_notified.add(agency_id)
+                    if len(self._agencies_notified) == 5:
+                        self._drawn = True
+                        logging.info("action: sorteo | result: success")
+                    else:
+                        logging.info(f"action: notificacion_recibida | result: success | agencia: {agency_id}")
+                        logging.info(f"Agencias notificadas: {self._agencies_notified}")
+                    client_sock.send("Notificación recibida\n".encode('utf-8'))
+                    return
+
+                if data.startswith("GET_WINNERS"):
+                    if not self._drawn:
+                        client_sock.send("Sorteo no realizado aún\n".encode('utf-8'))
+                        return
+                    
+                    agency_id = data.split(' ')[1]
+                    winners = self.__get_winners(agency_id)
+                    if winners:
+                        response = "\n".join(winners)
+                    else:
+                        response = "No hay ganadores para esta agencia"
+                    client_sock.send((response + "\n").encode('utf-8'))
+                    return
 
             # Process bets if the message is not a notification or winner request
             bets = data.split('\n')
