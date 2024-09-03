@@ -38,7 +38,7 @@ docker run --rm --name $CLIENT_CONTAINER_NAME --network $NETWORK_NAME busybox sh
 
 RESPONSE=$(cat response.txt)
 
-if [ "$MESSAGE" == "$RESPONSE" ]; then
+if [ "$MESSAGE" = "$RESPONSE" ]; then
   echo "action: test_echo_server | result: success"
 else
   echo "action: test_echo_server | result: fail"
