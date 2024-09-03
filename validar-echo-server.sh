@@ -29,11 +29,10 @@ MESSAGE="Hello, EchoServer!"
 # fi
 
 # Corre un contenedor temporal con netcat y verificar respuesta
-docker run --rm --network $NETWORK_NAME busybox sh -c "
-  echo '$MESSAGE' | nc $SERVER_CONTAINER_NAME 12345
-" > response.txt
+RESPONSE=$ docker run --rm --network $NETWORK_NAME busybox sh -c "
+  echo '$MESSAGE' | nc $SERVER_CONTAINER_NAME 12345" 
 
-RESPONSE=$(cat response.txt)
+# RESPONSE=$(cat response.txt)
 
 if [ "$MESSAGE" == "$RESPONSE" ]; then
   echo "action: test_echo_server | result: success"
