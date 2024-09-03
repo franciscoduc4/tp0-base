@@ -27,6 +27,7 @@ if [ "$(docker ps -q -f name=$SERVER_CONTAINER_NAME)" ]; then
   echo "Servidor iniciado correctamente."
 else
   echo "Error: El contenedor del servidor no se está ejecutando."
+  echo "action: test_echo_server | result: fail"
   exit 1
 fi
 
