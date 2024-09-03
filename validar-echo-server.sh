@@ -22,15 +22,21 @@ docker network create $NETWORK_NAME
 # Corre el contenedor del echoserver
 docker run -d --name $SERVER_CONTAINER_NAME --network $NETWORK_NAME $SERVER_IMAGE
 
-# Corre un contenedor temporal con netcat y guarda la respuesta en response.txt
-docker run --rm --name temp-netcat --network $NETWORK_NAME busybox sh -c "
-  echo -n '$MESSAGE' | nc $SERVER_CONTAINER_NAME 12345 > response.txt
-"
+# Verifica el estado del contenedor del servidor
+if [ "$(docker ps -q -f name=$SERVER_CONTAINER_NAME)" ]; then
+  echo "Servidor iniciado correctamente."
+else
+  echo "Error: El contenedor del servidor no se está ejecutando."
+  exit 1
+fi
 
-# Lee la respuesta del archivo
+# Corre un contenedor temporal con netcat y verificar respuesta
+docker run --rm --name $CLIENT_CONTAINER_NAME --network $NETWORK_NAME busybox sh -c "
+  echo '$MESSAGE' | nc $SERVER_CONTAINER_NAME 12345
+" > response.txt
+
 RESPONSE=$(cat response.txt)
 
-# Compara la respuesta con el mensaje original
 if [ "$MESSAGE" == "$RESPONSE" ]; then
   echo "action: test_echo_server | result: success"
 else
