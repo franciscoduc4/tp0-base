@@ -30,7 +30,7 @@ fi
 
 # Corre un contenedor temporal con netcat y verifica la respuesta
 docker run --rm --name $CLIENT_CONTAINER_NAME --network $NETWORK_NAME busybox sh -c "
-  echo '$MESSAGE' | nc $SERVER_CONTAINER_NAME 12345
+  | nc $SERVER_CONTAINER_NAME 12345
 " > response.txt
 
 RESPONSE=$(cat response.txt)
