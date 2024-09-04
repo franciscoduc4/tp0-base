@@ -13,11 +13,12 @@ services:
       - PYTHONUNBUFFERED=1
     networks:
       - testing_net
+    volumes:
+      - ./server/config.ini:/config.ini
 
 """
     
     content += server
-
 
     for i in range(1, int(clientsNumber) + 1):
         client = f"""  client{i}:
@@ -30,6 +31,8 @@ services:
       - testing_net
     depends_on:
       - server
+    volumes:
+      - ./client/config.yaml:/config.yaml
 
 """
         content += client
@@ -47,7 +50,7 @@ services:
     with open(fileName, 'w') as file:
         file.write(content)
 
-    print(f"OK")
+    print("OK")
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
