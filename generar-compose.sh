@@ -22,6 +22,8 @@ services:
       - PYTHONUNBUFFERED=1
     networks:
       - testing_net
+    volumes:
+      - ./server/config.ini:/config.ini
 EOL
 
 # Agrega cada cliente al archivo YAML
@@ -38,6 +40,9 @@ for ((i=1; i<=$num_clients; i++)); do
       - testing_net
     depends_on:
       - server
+    volumes:
+      - ./client/config.yaml:/config.yaml
+  
 EOL
 done
 
