@@ -1,5 +1,5 @@
 # #!/bin/bash
-NETWORK_NAME="echo_server_network"
+NETWORK_NAME="tp0_testing_net"
 SERVER_HOST="server"
 SERVER_PORT="12345"
 MESSAGE="Hello Server"
