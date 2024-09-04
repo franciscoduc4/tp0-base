@@ -13,6 +13,7 @@ num_clients=$2
 # Inicia el contenido del archivo YAML con la configuración básica
 cat <<EOL > $output_file
 version: '3.8'
+name: tp0
 services:
   server:
     container_name: server
