@@ -106,20 +106,20 @@ func main() {
 		os.Exit(1) 
 	}
 
+	// Variables de entorno necesarias para la apuesta
 	requiredEnvVars := []string{"NOMBRE", "APELLIDO", "DOCUMENTO", "NACIMIENTO", "NUMERO"}
 	apuesta := make(map[string]string)
 	for _, envVar := range requiredEnvVars {
 		value := os.Getenv(envVar)
+		fmt.Printf("Variable de entorno %s: %s\n", envVar, value) // Agregar esta línea
 		if value == "" {
 			log.Criticalf("Falta la variable de entorno requerida: %s", envVar)
 			os.Exit(1)
 		}
 		apuesta[envVar] = value
 	}
-
-	// Print program config with debugging purposes
 	PrintConfig(v)
-
+	
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
 		ID:            v.GetString("id"),
@@ -129,11 +129,15 @@ func main() {
 
 	client := common.NewClient(clientConfig)
 
+
+	// Enviar la apuesta al servidor
 	err = client.SendBet(apuesta)
 	if err != nil {
 		log.Criticalf("Error enviando apuesta: %v", err)
 		os.Exit(1)
 	}
+
+	// confirmación de apuesta enviada
 	log.Infof("action: apuesta_enviada | result: success | dni: %s | numero: %s", apuesta["DOCUMENTO"], apuesta["NUMERO"])
 
 	client.StartClientLoop()

@@ -68,12 +68,11 @@ func (c *Client) StartClientLoop() {
 			}
 			for _, betBatch := range c.bets {
 				fmt.Fprintf(c.conn, "%s\n", betBatch)
-				msg, err := bufio.NewReader(c.conn).ReadString('\n')
+				_, err := bufio.NewReader(c.conn).ReadString('\n')
 				if err != nil {
 					log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
 					return
 				}
-				log.Infof("action: batch_enviado | result: success | client_id: %v | msg: %v", c.config.ID, msg)
 			}
 			c.conn.Close()
 			time.Sleep(c.config.LoopPeriod)
@@ -95,15 +94,12 @@ func (c *Client) SendBet(apuesta map[string]string) error {
 	}
 	defer c.conn.Close()
 
+	betMessage := fmt.Sprintf("%s,%s,%s,%s,%s,%s",
+		c.config.ID, apuesta["NOMBRE"], apuesta["APELLIDO"], apuesta["DOCUMENTO"], apuesta["NACIMIENTO"], apuesta["NUMERO"])
 
-    // betMessage := fmt.Sprintf("AGENCIA=%s,NOMBRE=%s,APELLIDO=%s,DOCUMENTO=%s,NACIMIENTO=%s,NUMERO=%s",
-    // c.config.ID, apuesta["NOMBRE"], apuesta["APELLIDO"], apuesta["DOCUMENTO"], apuesta["NACIMIENTO"], apuesta["NUMERO"])
+	fmt.Fprintf(c.conn, "%s\n", betMessage)
 
-    betMessage := fmt.Sprintf("%s,%s,%s,%s,%s,%s",
-    c.config.ID, apuesta["NOMBRE"], apuesta["APELLIDO"], apuesta["DOCUMENTO"], apuesta["NACIMIENTO"], apuesta["NUMERO"])
-    
-    fmt.Fprintf(c.conn, "%s\n", betMessage)
-
+	// Lee la respuesta del servidor
 	response, err := bufio.NewReader(c.conn).ReadString('\n')
 	if err != nil {
 		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)

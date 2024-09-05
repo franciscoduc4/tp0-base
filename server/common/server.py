@@ -67,6 +67,8 @@ class Server:
                     
                     bet = Bet(agency, first_name, last_name, document, birthdate, number)
                     bet_objects.append(bet)
+                    logging.info(f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}")
+
                 except ValueError as e:
                     logging.error(f"action: receive_message | result: fail | error: {e}")
                     errors = True
@@ -77,7 +79,6 @@ class Server:
             else:
                 store_bets(bet_objects)
                 client_sock.send("Batch processed successfully\n".encode('utf-8'))
-                logging.info(f"action: apuesta_almacenada | result: success | cantidad: {len(bet_objects)}")
 
         except (OSError, ValueError) as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
