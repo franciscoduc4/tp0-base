@@ -152,6 +152,7 @@ func main() {
 
 	// Get the function to read bets from the CSV file
 	betDataRead := ReadBets(v.GetString("data.file"), clientConfig.ID)
+	log.Infof("action: read_bets | result: success | client_id: %v", clientConfig.ID)
 
 	for {
 		batch, err := betDataRead(clientConfig.BatchMaxSize)
