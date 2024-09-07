@@ -101,7 +101,6 @@ func ReadBets(fileName string, id string) func(int) ([]map[string]string, error)
 			record, err := reader.Read()
 			if err != nil {
 				if err.Error() == "EOF" {
-					// Handle EOF by returning remaining bets
 					return bets, nil
 				}
 				return nil, errors.Wrap(err, "error reading CSV file")
@@ -135,12 +134,8 @@ func NotifyEndOfBets(client *common.Client, config common.ClientConfig) error {
 }
 
 
-func GetWinners(client *common.Client, config common.ClientConfig) ([]string, error) {
-    winners, err := client.GetWinners()
-    if err != nil {
-        log.Errorf("action: get_winners | result: fail | client_id: %v | error: %v", config.ID, err)
-        return nil, err
-    }
+func GetWinners(client *common.Client, config common.ClientConfig) (string, error) {
+    winners := client.GetWinners()
     return winners, nil
 }
 
@@ -187,18 +182,29 @@ func main() {
 			log.Criticalf("Error sending bets: %v", err)
 			os.Exit(1)
 		}
+
 	}
 
 	if err := NotifyEndOfBets(client, clientConfig); err != nil {
 		os.Exit(1)
 	}
 
-	winners, err := GetWinners(client, clientConfig)
-	if err != nil {
-		os.Exit(1)
+	var winners string
+	for {
+		winners, err = GetWinners(client, clientConfig)
+		if err != nil {
+			log.Errorf("action: consulta_ganadores | result: fail | error: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		if strings.Contains(winners, "Sorteo no realizado") {
+			log.Infof("Sorteo no realizado aún, reintentando...")
+			time.Sleep(5 * time.Second)
+		} else {
+			break
+		}
 	}
-
-	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", len(winners))
-
-	client.StartClientLoop()
+	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", len(strings.Split(winners, "\n")))
+	os.Exit(0)
 }

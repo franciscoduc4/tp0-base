@@ -9,6 +9,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"io"
+	"encoding/binary"
 
 	"github.com/op/go-logging"
 )
@@ -61,8 +63,12 @@ func (c *Client) NotifyBetsFinished() error {
 	defer c.conn.Close()
 
 	message := fmt.Sprintf("NOTIFY_BETS_FINISHED %s", c.config.ID)
-	fmt.Fprintf(c.conn, "%s\n", message)
-
+	notifySize := uint16(len(message))
+	header := make([]byte, 2)
+	binary.BigEndian.PutUint16(header, notifySize)
+	c.conn.Write(header)
+	io.WriteString(c.conn, message)
+	
 	response, err := bufio.NewReader(c.conn).ReadString('\n')
 	if err != nil {
 		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
@@ -73,24 +79,26 @@ func (c *Client) NotifyBetsFinished() error {
 }
 
 // GetWinners Requests the list of winners from the server
-func (c *Client) GetWinners() ([]string, error) {
+func (c *Client) GetWinners() (string) {
 	if err := c.createClientSocket(); err != nil {
-		return nil, err
+		return "error"
 	}
 	defer c.conn.Close()
 
 	message := fmt.Sprintf("GET_WINNERS %s", c.config.ID)
-	fmt.Fprintf(c.conn, "%s\n", message)
+	winnersMsgSize := uint16(len(message))
+	header := make([]byte, 2)
+	binary.BigEndian.PutUint16(header, winnersMsgSize)
+	c.conn.Write(header)
+	io.WriteString(c.conn, message)
 
 	response, err := bufio.NewReader(c.conn).ReadString('\n')
 	if err != nil {
 		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-		return nil, err
+		return "error"
 	}
 
-	// Assuming the response contains a newline-separated list of winners
-	winners := strings.Split(strings.TrimSpace(response), "\n")
-	return winners, nil
+	return response
 }
 
 // StartClientLoop Handles the client loop to process batches and handle signals
@@ -123,46 +131,77 @@ func (c *Client) StartClientLoop() {
 	log.Infof("action: shutdown | result: success")
 }
 
-// SendBets Sends a batch of bets to the server
 func (c *Client) SendBets(bets []map[string]string) error {
-	if err := c.createClientSocket(); err != nil {
-		return err
-	}
-	defer c.conn.Close()
+    if err := c.createClientSocket(); err != nil {
+        return err
+    }
+    defer c.conn.Close()
 
-	var batch []string
-	for _, bet := range bets {
-		betMessage := fmt.Sprintf("%s,%s,%s,%s,%s,%s",
-			c.config.ID, bet["NOMBRE"], bet["APELLIDO"], bet["DOCUMENTO"], bet["NACIMIENTO"], bet["NUMERO"])
+    var batch []string
+    for _, bet := range bets {
+        betMessage := strings.Join([]string{
+            c.config.ID, bet["NOMBRE"], bet["APELLIDO"], bet["DOCUMENTO"], bet["NACIMIENTO"], bet["NUMERO"],
+        }, ",")
 
-		// Add the new bet to the batch
-		batch = append(batch, betMessage)
+        batch = append(batch, betMessage)
 
-		// If batch size reaches the configured limit, send the batch
-		if len(batch) >= c.config.BatchMaxSize {
-			batchMessage := strings.Join(batch, "\n")
-			fmt.Fprintf(c.conn, "%s\n", batchMessage)
-			response, err := bufio.NewReader(c.conn).ReadString('\n')
-			if err != nil {
-				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-				return err
-			}
-			log.Infof("action: response_received | result: success | client_id: %v | response: %v", c.config.ID, response)
-			batch = nil // Reset batch after sending
-		}
-	}
+        if len(batch) >= c.config.BatchMaxSize {
+            // Prepare the batch message
+            batchMessage := strings.Join(batch, "\n")
 
-	// Send any remaining bets in the last batch
-	if len(batch) > 0 {
-		batchMessage := strings.Join(batch, "\n")
-		fmt.Fprintf(c.conn, "%s\n", batchMessage)
-		response, err := bufio.NewReader(c.conn).ReadString('\n')
-		if err != nil {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return err
-		}
-		log.Infof("action: response_received | result: success | client_id: %v | response: %v", c.config.ID, response)
-	}
+			batchSize := uint16(len(batchMessage))
+            header := make([]byte, 2)
+            binary.BigEndian.PutUint16(header, batchSize)
 
-	return nil
+			if _, err := c.conn.Write(header); err != nil {
+                log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+                return err
+            }
+
+            // Send the batch message
+            if _, err := io.WriteString(c.conn, batchMessage); err != nil {
+                log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+                return err
+            }
+
+            // Read the response from the server
+            response, err := bufio.NewReader(c.conn).ReadString('\n')
+            if err != nil {
+                log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+                return err
+            }
+            log.Infof("action: response_received | result: success | client_id: %v | response: %v", c.config.ID, response)
+            batch = nil // Clear batch after sending
+        }
+    }
+
+    if len(batch) > 0 {
+        // Prepare the last batch message
+        batchMessage := strings.Join(batch, "\n")
+
+		batchSize := uint16(len(batchMessage))
+        header := make([]byte, 2)
+        binary.BigEndian.PutUint16(header, batchSize)
+
+        // Send the header
+        if _, err := c.conn.Write(header); err != nil {
+            log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+            return err
+        }
+
+        // Send the batch message
+        if _, err := io.WriteString(c.conn, batchMessage); err != nil {
+            log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+            return err
+        }
+
+        // Read the response from the server
+        response, err := bufio.NewReader(c.conn).ReadString('\n')
+        if err != nil {
+            log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+            return err
+        }
+        log.Infof("action: response_received | result: success | client_id: %v | response: %v", c.config.ID, response)
+    }
+    return nil
 }
